@@ -1,0 +1,54 @@
+#!/bin/sh
+if [ $# == 0 ]; then
+	echo "Usage: $0 .... "
+	echo "		[-t|--to to_address] "
+	echo "		[-s|--subj subject] "
+	echo "		[-f|--file attachment]"
+	echo "		[-a|--attach|-i|--inline]"
+	exit
+fi
+
+TEMP=`getopt -o t:c:b:s:f:ai --long to:,cc:,bcc:,subj:,file:,attach,inline -n 'send-file' -- "$@"`
+if [ $? != 0 ] ; then echo "Terminating..." >&2 ; exit 1 ; fi
+eval set -- "$TEMP"
+
+while true ; do
+	case "$1" in
+		-t|--to) TO=`echo -n "$2" | esc`; shift; shift
+			;;
+		-c|--cc) CC=`echo -n "$2" | esc`; shift; shift
+			;;
+		-b|--bcc) BCC=`echo -n "$2" | esc`; shift; shift
+			;;
+		-s|--subj) SUBJ=`echo -n "$2" | esc`; shift; shift
+			;;
+		-f|--file) FILE=$2; shift;shift
+			;;
+		-a|--attach) METHOD="attach"; shift
+			;;
+		-i|--inline) METHOD="inline"; shift
+			;;
+		--)	break;
+			;;
+		*)	echo "Internal error!"; exit 1
+			;;
+	esac
+done
+
+if [ -z $METHOD ]; then
+	echo "Method is not set, attaching the file"
+	METHOD="attach"
+fi
+
+CMDLINE="mailto:$TO?cc=$CC&bcc=$BCC&subject=$SUBJ"
+
+if [ $METHOD == "attach" ]; then
+	CMDLINE=${CMDLINE}\&attach=`echo -n "$FILE" | esc`
+elif [ $METHOD == "inline" ]; then
+	CMDLINE=${CMDLINE}\&body=`esc "$FILE"`
+else 
+	echo "Bad 'method': use -a/--attach or -i/--inline!"
+	exit 1
+fi
+
+evolution $CMDLINE

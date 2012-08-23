@@ -1,0 +1,232 @@
+#!/bin/bash
+
+function say() {
+	echo -ne "\033[1;35m"
+	echo -ne $*
+	echo -ne "\033[0m"
+}
+
+function late_init() {
+	echo -n ""
+}
+
+function _filesize() {
+	ls -nl $1 | awk '{print $5}'
+}
+
+function _do() {
+	VAR=$1
+	shift
+	$* $VAR	
+}
+
+function _do_all() {
+	for v in $1; do
+		_do $v $2
+	done	
+}
+
+VARIABLES="TARGET_O TARGET_CPUARCH TARGET_CROSS TARGET_ROOT TARGET_TFTP \
+	TARGET_CODE TARGET_TARGET_BIN TARGET_PATH TARGET_UBOOT_BIN	\
+	TARGET_CUSTOM_CP JOPT"
+ROOT="/"
+FQDN_PRJ_VARS=""
+PRJ_VARS1="@project-vars"
+PRJ_VARS2="project-vars"
+DEFAULTS1="$HOME/defaults/$PRJ_VARS1"
+DEFAULTS2="$HOME/defaults/$PRJ_VARS2"
+SCRIPT=$(cd `dirname "${BASH_SOURCE[0]}"` && pwd)/`basename "${BASH_SOURCE[0]}"`
+PRJ_SILENT=${PRJ_SILENT:=0}
+
+_do_all "$VARIABLES" unset
+
+[ -x $DEFAULTS1 ] && . $DEFAULTS1
+[ -x $DEFAULTS2 ] && . $DEFAULTS2
+
+pushd . > /dev/null
+
+src[0]=""
+src_index=-1
+
+while [ "`pwd`" != "$ROOT" ]; do
+	[ -e $PRJ_VARS1 ] && src[++src_index]="`pwd`/$PRJ_VARS1"
+	[ -e $PRJ_VARS2 ] && src[++src_index]="`pwd`/$PRJ_VARS2"
+	cd ..
+done
+popd > /dev/null 2>&1
+
+while [ $src_index -ge 0 ]; do
+	a=${src[src_index--]}
+	[ $PRJ_SILENT -eq 0 ] && say "### @@ $a\n"
+	pushd `dirname $a` > /dev/null
+	source ./"`basename $a`"
+	popd > /dev/null
+done
+
+TARGET_TARGET_BIN="$TARGET_TARGET-${TARGET_CODE}${TARGET_CODE2}"
+TARGET_PATH="arch/$TARGET_CPUARCH/boot"
+TARGET_UBOOT_BIN="uboot-$TARGET_CODE-dimka.bin"
+TARGET_O="${TARGET_O_PREFIX}/o-$TARGET_CODE"
+TARGET_U="${TARGET_O_PREFIX}/u-$TARGET_CODE"
+if [ ! -z "$TARGET_CP" ]; then
+	TARGET_CUSTOM_CP=${TARGET_CP}
+fi
+
+# start with exporting variables...
+_do_all "$VARIABLES" export
+late_init
+# the 2nd chance to export variables
+_do_all "$VARIABLES" export
+
+alias V=
+
+function mko() {
+	mkdir -p $TARGET_O
+	[ $PRJ_SILENT -eq 0 ] && echo "Directory $TARGET_O created"
+}
+
+function mkroot() {
+	if [ -e $TARGET_ROOT ]; then
+		return
+	fi
+	mkdir -p $TARGET_ROOT
+	[ $PRJ_SILENT -eq 0 ] && echo "Directory $TARGET_ROOT created"
+}
+
+function M() {
+	PRJ_SILENT=1 mko
+	PRJ_SILENT=1 mkroot
+	make 					\
+		O=$TARGET_O 			\
+		ARCH=$TARGET_CPUARCH 		\
+		CROSS_COMPILE=$TARGET_CROSS 	\
+		INSTALL_MOD_PATH=$TARGET_ROOT 	\
+		$* 				\
+		$JOPT
+}
+
+function MM() {
+	PRJ_SILENT=1 M $TARGET_TARGET $*
+}
+
+function m() {
+	PRJ_SILENT=1 M modules
+	sudo make 				\
+		O=$TARGET_O 			\
+		ARCH=$TARGET_CPUARCH 		\
+		CROSS_COMPILE=$TARGET_CROSS 	\
+		INSTALL_MOD_PATH=$TARGET_ROOT 	\
+		$JOPT 				\
+		modules_install 
+}
+
+function Mm() {
+	PRJ_SLIENT=1 M && m
+}
+
+function Mz() {
+	PRJ_SILENT=1 M zImage $*
+}
+
+function Mu() {
+	PRJ_SILENT=1 M uImage $*
+}
+
+function do_copy_using1() {
+	FS=`_filesize $TARGET_O/$2`
+	[ $PRJ_SILENT -eq 0 ] && echo "# ($TARGET_O/$2) =>"
+	[ $PRJ_SILENT -eq 0 ] && echo "# => ($TARGET_TFTP) $3 size $FS"
+	$1 $TARGET_O/$2 $TARGET_TFTP/$3
+}
+
+function do_copy_using() {
+	if [ $# -ge 1 ]; then
+		CP_CMD=$1
+		shift
+	fi
+
+	if [ $# -ge 2 ]; then
+		while [ $# -ge 2 ]; do
+			do_copy_using1 $CP_CMD "$1" "$2"
+			shift
+			shift
+		done
+	else
+		do_copy_using1 $CP_CMD "$TARGET_PATH/$TARGET_TARGET" "$TARGET_TARGET_BIN"
+	fi
+}
+
+function C() {
+	if [ ! -z "$TARGET_CUSTOM_CP" ]; then
+		echo "# Exec '$TARGET_CUSTOM_CP'"
+		echo "$TARGET_CUSTOM_CP" | bash
+	else
+		do_copy_using scp $*
+	fi
+}
+
+function Cc() {
+	do_copy_using cp $*
+}
+
+function U() {
+	make CROSS_COMPILE=$TARGET_CROSS O=$TARGET_U ARCH=${TARGET_CPUARCH} $*
+}
+
+function u() {
+	fs=`_filesize $TARGET_U/u-boot.bin`
+	[ $PRJ_SILENT -eq 0 ] && echo "# => ($TARGET_TFTP) $TARGET_UBOOT_BIN size ${FS}"
+	scp $TARGET_U/u-boot.bin $TARGET_TFTP/$TARGET_UBOOT_BIN
+}
+
+function MC() {
+	PRJ_SILENT=1 MM $* && PRJ_SILENT=1 C
+}
+
+function MCL() {
+	PRJ_SILENT=1 MM && C && L
+}
+
+function CL() {
+	PRJ_SILENT=1 C && L
+}
+
+function Uu() {
+	PRJ_SILENT=1 U && u
+}
+
+function cf() {
+	cp -v $1 ${TARGET_O}/.config
+	PRJ_SILENT=1 M oldconfig
+}
+
+function L() {
+	~/bin/lds $TARGET_TARGET_BIN $*
+}
+
+function v() {
+	args=$(echo -n $* | sed 's/:/ +/' | sed 's/://g')
+#	echo "VI $args"
+	vim --cmd "set tags=${TARGET_O}/tags,${TARGET_U}/ctags" $args
+}
+
+function setup() {
+	for alias in M MM Mz Mu C U u Uu MC cfi L MCL CL v m Mm mko mkroot; do
+		alias $alias=". $SCRIPT $alias"
+	done
+	alias diff='/usr/bin/diff -uNr -X ~/defaults/dontdiff'
+}
+
+function fix_arch() {
+	if [ "x$TARGET_ARCH" != "x" ]; then
+		echo "TARGET_ARCH is deprecated, forcing to set TARGET_CPUARCH = '$TARGET_ARCH'"
+		export TARGET_CPUARCH=$TARGET_ARCH
+		unset -v TARGET_ARCH
+	fi
+}
+
+cmd=$1
+shift
+say "### -> \"$cmd\" $*\n"
+fix_arch
+$cmd $*

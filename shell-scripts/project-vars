@@ -1,0 +1,9 @@
+# defaults
+TARGET_ARCH=""
+TARGET_CROSS=""
+TARGET_ROOT=""
+TARGET_TARGET="zImage"
+TARGET_TFTP="/tftpboot/"
+TARGET_CODE="unknown"
+TARGET_O_PREFIX=".."
+

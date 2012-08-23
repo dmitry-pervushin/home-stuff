@@ -1,0 +1,77 @@
+#!/usr/bin/env python
+import sys, os
+
+defaults = {
+	'size'  : 14,
+	'dir'   : 2,
+	'none'  : 0,
+	'read'  : 2,
+	'write' : 1,
+}
+arch_defaults = {
+	'ppc': { 'size': 13, 'dir': 3, 'none': 1, 'read': 2, 'write': 4 },
+	'-'  : defaults,
+}
+linux = "/usr/src/linux"
+
+def field(value, shift, bits):
+	return (value >> shift) & ( (1<<bits) - 1 )
+
+def main():
+	if len(sys.argv) < 1:
+		print "Usage: %s (arch|-) ioctl-to-decode..." % sys.argv[0]
+
+	if sys.argv[1] in arch_defaults.keys():
+		arch = arch_defaults[sys.argv[1]]
+		ioctls = sys.argv[2:]
+	else:
+		print "Using default values"
+		arch = defaults
+		ioctls = sys.argv[1:]
+
+	for str_code in ioctls:
+		try:
+			code = int(str_code, 0)
+		except:
+			print "Unparseable code '%s'" % str_code
+			continue
+		nr = field(code, 0, 8)
+		t = field(code, 8 + 0, 8)
+		size = field(code, 8 + 8 + 0, arch['size'])
+		direc = field(code, 8 + 8 + 0 + arch['size'], arch['dir'])
+	
+		# parsing direction of IOCTL
+		if direc == arch['none']:
+			str_dir = '_IO'
+		elif direc == arch['read']:
+			str_dir = '_IOR'
+		elif direc == arch['write']:
+			str_dir = '_IOW'
+		elif direc == arch['read'] | arch['write']:
+			str_dir = '_IOWR'
+		else:
+			str_dir = '* error *'
+		
+		# let's figure if type is ASCII...
+		if (t >= ord('0') and t <= ord('9')) or	\
+		   (t >= ord('a') and t <= ord('z')) or	\
+		   (t >= ord('A') and t <= ord('Z')):
+			str_t = "'%c'" % t
+		else:
+			str_t = "%d" % t
+
+		# grepable is the string we'll feed to grep
+		# I'll omit the 'size' parameter for enough 
+		# clear reasons...
+		grepable = "%s(%s, 0x%x" % (str_dir, str_t, nr)
+		if str_dir == '_IO':
+			viewable = grepable + ")"
+		else:
+			viewable = grepable + ", size = %d)" % size
+		print "\n%s = %s" % (str_code, viewable)
+
+		# hope it'll find something :)
+		os.system("grep -ir -- \"%s\" %s/include/linux" % (grepable, linux))
+
+if __name__ == "__main__":
+	main()
