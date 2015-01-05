@@ -9,10 +9,11 @@ install:
 	${Q}install -m 0755 bin/* ~/bin
 	${Q}install -d ~/defaults
 	${Q}install -m 0755 project-vars ~/defaults/project-vars
+	${Q}install -m 0755 v3-vars ~/defaults/v3-vars
 	${Q}touch ~/defaults/dontdiff
 	${Q}([ -f ${DONTDIFF} ] && cp ${DONTDIFF} ~/defaults)
 
-	${Q}install -m 0755 shoeleather ~/bin/shoeleather
+	# ${Q}install -m 0755 shoeleather ~/bin/shoeleather
 	@echo Installed to ${HOME}
 	@echo You might need to logoff/logon to activate changes from .bash_profile
 

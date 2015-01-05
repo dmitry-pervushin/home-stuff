@@ -28,6 +28,7 @@ function _do_all() {
 
 VARIABLES="TARGET_O TARGET_CPUARCH TARGET_CROSS TARGET_ROOT TARGET_TFTP \
 	TARGET_CODE TARGET_TARGET_BIN TARGET_PATH TARGET_UBOOT_BIN	\
+	TARGET_MAKE	\
 	TARGET_CUSTOM_CP JOPT"
 ROOT="/"
 FQDN_PRJ_VARS=""
@@ -66,8 +67,8 @@ done
 TARGET_TARGET_BIN="$TARGET_TARGET-${TARGET_CODE}${TARGET_CODE2}"
 TARGET_PATH="arch/$TARGET_CPUARCH/boot"
 TARGET_UBOOT_BIN="uboot-$TARGET_CODE-dimka.bin"
-TARGET_O="${TARGET_O_PREFIX}/o-$TARGET_CODE"
-TARGET_U="${TARGET_O_PREFIX}/u-$TARGET_CODE"
+TARGET_O="${TARGET_O:-${TARGET_O_PREFIX}/o-$TARGET_CODE}"
+TARGET_U="${TARGET_U:-${TARGET_O_PREFIX}/u-$TARGET_CODE}"
 if [ ! -z "$TARGET_CP" ]; then
 	TARGET_CUSTOM_CP=${TARGET_CP}
 fi
@@ -96,7 +97,7 @@ function mkroot() {
 function M() {
 	PRJ_SILENT=1 mko
 	PRJ_SILENT=1 mkroot
-	make 					\
+	$TARGET_MAKE				\
 		O=$TARGET_O 			\
 		ARCH=$TARGET_CPUARCH 		\
 		CROSS_COMPILE=$TARGET_CROSS 	\
@@ -111,13 +112,34 @@ function MM() {
 
 function m() {
 	PRJ_SILENT=1 M modules
-	sudo make 				\
+	if [ $? -eq 0 ] ; then
+	   sudo $TARGET_MAKE			\
 		O=$TARGET_O 			\
 		ARCH=$TARGET_CPUARCH 		\
 		CROSS_COMPILE=$TARGET_CROSS 	\
 		INSTALL_MOD_PATH=$TARGET_ROOT 	\
 		$JOPT 				\
 		modules_install 
+	fi
+}
+
+function mmcfg() {
+	NCFG=`ls *.cfg | wc -l`
+	if [ $NCFG -ne 1 ]; then
+		echo "Ohh, $NCFG config files found, don't know which to use...."
+		return
+	fi
+	REL=`ls *.cfg | sed s/entrynav_TEGRA_// | sed s/_kernel_config.cfg//`
+	echo "Found release \"$REL\", continue?"
+	read cont
+	if [ y$cont != yy ]; then
+		echo "Bailing out"
+		return
+	fi
+	echo "TARGET_CODE=$REL" >> @project-vars
+	setup
+	mko
+	cp -v *.cfg ${TARGET_O}/.config
 }
 
 function Mm() {
@@ -170,7 +192,7 @@ function Cc() {
 }
 
 function U() {
-	make CROSS_COMPILE=$TARGET_CROSS O=$TARGET_U ARCH=${TARGET_CPUARCH} $*
+	$TARGET_MAKE CROSS_COMPILE=$TARGET_CROSS O=$TARGET_U ARCH=${TARGET_CPUARCH} $*
 }
 
 function u() {
@@ -210,8 +232,27 @@ function v() {
 	vim --cmd "set tags=${TARGET_O}/tags,${TARGET_U}/ctags" $args
 }
 
+function cimg() {
+	M $TARGET_TARGET 
+        cp -v "$TARGET_O/$TARGET_PATH/$TARGET_TARGET" /tmp/Image
+	pushd ~/projects/nvidia/host-flashing-utilities > /dev/null
+	cp -v /tmp/Image kernel/Image
+	cp -v /tmp/Image maintenance/zImage_initramfs
+	sh -x create_images.sh
+	mkdir -p out
+	cp -v images/kernel_images/loadrealprim.img ~/out/loadrealprim-$TARGET_CODE.img
+	cp -v images/kernel_images/loadrecov.img ~/out/loadrecov-$TARGET_CODE.img
+	popd > /dev/null
+	
+}
+
+function nv() {
+	say ">>> Running nv stuff \"$*\"\n"
+	$*
+}
+
 function setup() {
-	for alias in M MM Mz Mu C U u Uu MC cfi L MCL CL v m Mm mko mkroot; do
+	for alias in M MM Mz Mu C U u Uu MC cfi L MCL CL v m Mm mko mkroot mmcfg cimg nv; do
 		alias $alias=". $SCRIPT $alias"
 	done
 	alias diff='/usr/bin/diff -uNr -X ~/defaults/dontdiff'
