@@ -1,0 +1,13 @@
+echo "Configuring for VIBRANTE"
+
+export FLAVOR=debug
+export VR=`pwd`							# Vibrante Root 
+
+. ${VR}/tmake/scripts/envsetup.sh 				> /dev/null
+choose embedded-linux vcm30t124 none $FLAVOR internal x11 	> /dev/null
+
+TARGET_CROSS=/home/dimka/projects/nvidia/p4/sw/mobile/tools/linux/crosstool-ng/arm-cortex_a9-linux-gnueabi/gcc-4.5.3-glibc-2.11.3-hard/bin/arm-cortex_a9-linux-gnueabi-
+TARGET_CPUARCH=arm
+TARGET_MAKE=${VR}/tmake/prebuilt/linux-x86_64/make-3.82
+TARGET_O=${VR}/out/embedded-linux-vcm30t124-${FLAVOR}/nvidia/kernel
+TARGET_TARGET=zImage
