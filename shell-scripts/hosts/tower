@@ -1,0 +1,2 @@
+export P4ROOT=${HOME}/projects/nvidia/p4
+export P4=${P4ROOT}

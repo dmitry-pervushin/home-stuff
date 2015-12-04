@@ -1,0 +1,2 @@
+alias pesg="ssh -l pesg-ae pesg-ae-lab"
+

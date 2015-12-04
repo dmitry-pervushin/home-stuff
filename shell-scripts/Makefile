@@ -11,6 +11,7 @@ install:
 	${Q}install -m 0755 project-vars ~/defaults/project-vars
 	${Q}touch ~/defaults/dontdiff
 	${Q}([ -f ${DONTDIFF} ] && cp ${DONTDIFF} ~/defaults)
+	${Q}ln -s `pwd`/hosts ~/hosts
 
 	${Q}install -m 0755 shoeleather ~/bin/shoeleather
 	@echo Installed to ${HOME}
